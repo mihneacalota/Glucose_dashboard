@@ -3,9 +3,8 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 
-# Configure page
+# Configure page for full width
 st.set_page_config(page_title="Blood Glucose Dashboard", layout="wide")
 
 st.title("Blood Glucose Dashboard")
@@ -18,7 +17,7 @@ if uploaded_file:
         return pd.read_excel(file)
 
     df = load_data(uploaded_file)
-    # st.write("### Data Preview", df.head())
+    st.write("### Data Preview", df.head())
 
     # Auto-detect datetime and glucose columns
     datetime_col = df.columns[0]
@@ -33,52 +32,92 @@ if uploaded_file:
     # Tabs for full vs single-day view
     tab_full, tab_day = st.tabs(["Full Data", "Single Day"])
 
-    # Full Data tab remains unchanged
+    # FULL DATA TAB
     with tab_full:
         st.header("Full Timeline")
         min_date = df['date_only'].min().date()
         max_date = df['date_only'].max().date()
-        start_date = st.date_input("Start date", min_value=min_date, max_value=max_date, value=min_date, key='full_start')
-        end_date = st.date_input("End date", min_value=min_date, max_value=max_date, value=max_date, key='full_end')
-        df_full = df[(df[datetime_col] >= pd.Timestamp(start_date)) & (df[datetime_col] <= pd.Timestamp(end_date))]
-        dates_full = df_full['date_only'].drop_duplicates()
-        fig_full = go.Figure()
-        fig_full.add_trace(go.Scatter(
-            x=df_full[datetime_col], y=df_full[glucose_col], mode='lines', name='Glucose', line=dict(color='plum')
-        ))
-        for d in dates_full:
-            fig_full.add_vline(x=d, line_width=1, line_color='lightgray', opacity=0.5, layer='below')
-        fig_full.update_layout(
-            xaxis=dict(title='Time', type='date', rangeslider=dict(visible=True)),
-            yaxis=dict(range=[2, 12], title='Glucose'), hovermode='x unified', margin=dict(l=40, r=20, t=30, b=40)
+        start_date = st.date_input(
+            "Start date", min_value=min_date, max_value=max_date, value=min_date, key='full_start'
         )
-        st.plotly_chart(fig_full, use_container_width=True)
+        end_date = st.date_input(
+            "End date", min_value=min_date, max_value=max_date, value=max_date, key='full_end'
+        )
+        df_full = df[
+            (df[datetime_col] >= pd.Timestamp(start_date)) & 
+            (df[datetime_col] <= pd.Timestamp(end_date))
+        ]
+        dates_full = df_full['date_only'].drop_duplicates()
 
-    # Single Day tab
+        # Determine y-axis max (min 10)
+        max_val_full = max(10, df_full[glucose_col].max()) if not df_full.empty else 10
+
+        # Plotly figure
+        fig_full = go.Figure()
+        fig_full.add_trace(
+            go.Scatter(
+                x=df_full[datetime_col],
+                y=df_full[glucose_col],
+                mode='lines',
+                # no legend name to hide legend
+                line=dict(color='#007bff'),
+                fill='tozeroy',
+                fillcolor='rgba(0,123,255,0.2)'
+            )
+        )
+        # Daily splits
+        for d in dates_full:
+            fig_full.add_vline(
+                x=d,
+                line_width=1,
+                line_color='lightgray',
+                opacity=0.5,
+                layer='below'
+            )
+        # Layout: edge-to-edge, responsive, no y-axis title, hide legend
+        fig_full.update_layout(
+            autosize=True,
+            margin=dict(l=0, r=0, t=30, b=0),
+            showlegend=False,
+            xaxis=dict(
+                title='Time',
+                type='date',
+                rangeslider=dict(visible=True)
+            ),
+            yaxis=dict(
+                range=[2, max_val_full]
+            ),
+            hovermode='x unified'
+        )
+        st.plotly_chart(
+            fig_full, use_container_width=True, config={'responsive': True}
+        )
+
+    # SINGLE DAY TAB
     with tab_day:
         st.header("Single Day View")
-        # Initialize session state for index
         if 'day_idx' not in st.session_state:
             st.session_state.day_idx = 0
-        # Day selector
+        selected_date = unique_dates[st.session_state.day_idx]
+        # Day selector and nav
         sel = st.selectbox(
             "Choose a day",
             options=unique_dates,
             index=st.session_state.day_idx,
             format_func=lambda d: d.strftime('%A, %d %B')
         )
-        # Navigation buttons
-        prev_col, next_col = st.columns(2)
-        if prev_col.button("Previous Day"):
-            if st.session_state.day_idx > 0:
-                st.session_state.day_idx -= 1
-        if next_col.button("Next Day"):
-            if st.session_state.day_idx < len(unique_dates) - 1:
-                st.session_state.day_idx += 1
-        # Update selected_date from state
-        selected_date = unique_dates[st.session_state.day_idx]
+        prev_col, next_col = st.columns([1, 1])
+        if prev_col.button("Previous Day") and st.session_state.day_idx > 0:
+            st.session_state.day_idx -= 1
+            selected_date = unique_dates[st.session_state.day_idx]
+        if next_col.button("Next Day") and st.session_state.day_idx < len(unique_dates) - 1:
+            st.session_state.day_idx += 1
+            selected_date = unique_dates[st.session_state.day_idx]
 
-        # Data for selected and previous day
+        # Overlay average-day option (last 7 days)
+        show_avg = st.checkbox("Overlay 7-day average day")
+
+        # Data filtering
         day_df = df[df['date_only'] == selected_date]
         prev_date = selected_date - pd.Timedelta(days=1)
         prev_df = df[df['date_only'] == prev_date]
@@ -91,26 +130,82 @@ if uploaded_file:
         prev_min = prev_df[glucose_col].min() if not prev_df.empty else None
         prev_max = prev_df[glucose_col].max() if not prev_df.empty else None
 
-        # Display metrics with two-decimal deltas
+        # Display metrics
         m1, m2, m3 = st.columns(3)
-        m1.metric("Avg Glucose", f"{avg:.1f}", delta=f"{avg - prev_avg:.2f}" if prev_avg is not None else None)
-        m2.metric("Min Glucose", f"{mn}", delta=f"{mn - prev_min:.2f}" if prev_min is not None else None)
-        m3.metric("Max Glucose", f"{mx}", delta=f"{mx - prev_max:.2f}" if prev_max is not None else None)
+        m1.metric(
+            "Avg Glucose",
+            f"{avg:.1f}",
+            delta=f"{avg - prev_avg:.2f}" if prev_avg is not None else None
+        )
+        m2.metric(
+            "Min Glucose",
+            f"{mn}",
+            delta=f"{mn - prev_min:.2f}" if prev_min is not None else None
+        )
+        m3.metric(
+            "Max Glucose",
+            f"{mx}",
+            delta=f"{mx - prev_max:.2f}" if prev_max is not None else None
+        )
 
-        # Line chart for single day
+        # Determine y-axis max for single day
+        max_val_day = max(10, day_df[glucose_col].max()) if not day_df.empty else 10
+
+        # Plotly figure for single day
         fig_day = go.Figure()
-        fig_day.add_trace(go.Scatter(
-            x=day_df[datetime_col], y=day_df[glucose_col], mode='lines', name='Glucose', line=dict(color='teal')
-        ))
-        fig_day.add_vline(x=selected_date, line_width=1, line_color='lightgray', opacity=0.5, layer='below')
+        fig_day.add_trace(
+            go.Scatter(
+                x=day_df[datetime_col],
+                y=day_df[glucose_col],
+                mode='lines',
+                line=dict(color='teal'),
+                fill='tozeroy',
+                fillcolor='rgba(0,128,128,0.2)'
+            )
+        )
+        if show_avg:
+            last_week = df[
+                (df['date_only'] > selected_date - pd.Timedelta(days=7)) & 
+                (df['date_only'] <= selected_date)
+            ]
+            last_week['time_only'] = last_week[datetime_col].dt.time
+            avg_series = last_week.groupby('time_only')[glucose_col].mean().reset_index()
+            avg_series['datetime'] = avg_series['time_only'].apply(
+                lambda t: pd.Timestamp.combine(selected_date, t)
+            )
+            fig_day.add_trace(
+                go.Scatter(
+                    x=avg_series['datetime'],
+                    y=avg_series[glucose_col],
+                    mode='lines',
+                    line=dict(color='orange'),
+                    opacity=0.7
+                )
+            )
+        fig_day.add_vline(
+            x=selected_date,
+            line_width=1,
+            line_color='lightgray',
+            opacity=0.5,
+            layer='below'
+        )
         fig_day.update_layout(
+            autosize=True,
+            margin=dict(l=0, r=0, t=30, b=0),
+            showlegend=False,
             xaxis=dict(
-                title='Time', type='date', range=[selected_date, selected_date + pd.Timedelta(days=1)],
+                title='Time',
+                type='date',
+                range=[selected_date, selected_date + pd.Timedelta(days=1)],
                 rangeslider=dict(visible=True)
             ),
-            yaxis=dict(range=[2, 12], title='Glucose'), hovermode='x unified', margin=dict(l=40, r=20, t=30, b=40)
+            yaxis=dict(
+                range=[2, max_val_day]
+            ),
+            hovermode='x unified'
         )
-        st.plotly_chart(fig_day, use_container_width=True)
-
+        st.plotly_chart(
+            fig_day, use_container_width=True, config={'responsive': True}
+        )
 else:
     st.info("Please upload an .xls or .xlsx file to get started.")
