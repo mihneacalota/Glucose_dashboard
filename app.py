@@ -79,6 +79,7 @@ if uploaded_file:
             autosize=True,
             margin=dict(l=0, r=0, t=30, b=0),
             showlegend=False,
+            dragmode='pan',
             xaxis=dict(
                 title='Time',
                 type='date',
@@ -90,7 +91,7 @@ if uploaded_file:
             hovermode='x unified'
         )
         st.plotly_chart(
-            fig_full, use_container_width=True, config={'responsive': True}
+            fig_full, use_container_width=True, config={'responsive': True, 'scrollZoom': False}
         )
 
     # SINGLE DAY TAB
@@ -158,6 +159,7 @@ if uploaded_file:
                 x=day_df[datetime_col],
                 y=day_df[glucose_col],
                 mode='lines',
+                name='Glucose',
                 line=dict(color='teal'),
                 fill='tozeroy',
                 fillcolor='rgba(0,128,128,0.2)'
@@ -178,6 +180,7 @@ if uploaded_file:
                     x=avg_series['datetime'],
                     y=avg_series[glucose_col],
                     mode='lines',
+                    name='7-day average',
                     line=dict(color='orange'),
                     opacity=0.7
                 )
@@ -193,6 +196,7 @@ if uploaded_file:
             autosize=True,
             margin=dict(l=0, r=0, t=30, b=0),
             showlegend=False,
+            dragmode='pan',
             xaxis=dict(
                 title='Time',
                 type='date',
@@ -205,7 +209,7 @@ if uploaded_file:
             hovermode='x unified'
         )
         st.plotly_chart(
-            fig_day, use_container_width=True, config={'responsive': True}
+            fig_day, use_container_width=True, config={'responsive': True, 'scrollZoom': False}
         )
 else:
     st.info("Please upload an .xls or .xlsx file to get started.")
