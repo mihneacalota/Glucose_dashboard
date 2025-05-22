@@ -17,7 +17,7 @@ if uploaded_file:
         return pd.read_excel(file)
 
     df = load_data(uploaded_file)
-    st.write("### Data Preview", df.head())
+    # st.write("### Data Preview", df.head())
 
     # Auto-detect datetime and glucose columns
     datetime_col = df.columns[0]
@@ -97,26 +97,42 @@ if uploaded_file:
     # SINGLE DAY TAB
     with tab_day:
         st.header("Single Day View")
+        # Initialize session state for index if missing
         if 'day_idx' not in st.session_state:
             st.session_state.day_idx = 0
+        # Date input for selecting single day
+        min_date = unique_dates[0].date()
+        max_date = unique_dates[-1].date()
+        # Current selected_date from session_state
         selected_date = unique_dates[st.session_state.day_idx]
-        # Day selector and nav
-        sel = st.selectbox(
-            "Choose a day",
-            options=unique_dates,
-            index=st.session_state.day_idx,
-            format_func=lambda d: d.strftime('%A, %d %B')
+        # Date input field
+        input_date = st.date_input(
+            "Select day",
+            value=selected_date.date(),
+            min_value=min_date,
+            max_value=max_date,
+            key='single_day_input'
         )
+        # Update day_idx based on input_date
+        if input_date != selected_date.date():
+            # find closest matching date_only
+            try:
+                st.session_state.day_idx = unique_dates.index(pd.Timestamp(input_date))
+            except ValueError:
+                # if not exact match, ignore
+                pass
+        # Prev/Next buttons
         prev_col, next_col = st.columns([1, 1])
         if prev_col.button("Previous Day") and st.session_state.day_idx > 0:
             st.session_state.day_idx -= 1
-            selected_date = unique_dates[st.session_state.day_idx]
         if next_col.button("Next Day") and st.session_state.day_idx < len(unique_dates) - 1:
             st.session_state.day_idx += 1
-            selected_date = unique_dates[st.session_state.day_idx]
+        # finalize selected_date
+        selected_date = unique_dates[st.session_state.day_idx]
 
         # Overlay average-day option (last 7 days)
         show_avg = st.checkbox("Overlay 7-day average day")
+
 
         # Data filtering
         day_df = df[df['date_only'] == selected_date]
@@ -130,6 +146,10 @@ if uploaded_file:
         prev_avg = prev_df[glucose_col].mean() if not prev_df.empty else None
         prev_min = prev_df[glucose_col].min() if not prev_df.empty else None
         prev_max = prev_df[glucose_col].max() if not prev_df.empty else None
+
+        # Display selected date in normal format
+        st.subheader(f"Selected date: {selected_date.strftime('%d-%m-%Y')}")
+
 
         # Display metrics
         m1, m2, m3 = st.columns(3)
